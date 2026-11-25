@@ -17,6 +17,13 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function formatLocalDate(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function registerDatabaseHandlers(db) {
   const register = (channel, handler) => {
     ipcMain.handle(channel, async (_event, ...args) => {
@@ -35,6 +42,62 @@ function registerDatabaseHandlers(db) {
   register('auth:login', (enteredPin) => {
     const settings = db.prepare('SELECT pin_code FROM settings LIMIT 1').get()
     return { authenticated: String(enteredPin ?? '') === String(settings?.pin_code ?? '') }
+  })
+
+  register('dashboard:getStats', () => {
+    const now = new Date()
+    const today = formatLocalDate(now)
+    const monthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1))
+    const nextMonthStart = formatLocalDate(new Date(now.getFullYear(), now.getMonth() + 1, 1))
+    const chartStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6)
+    const chartStart = formatLocalDate(chartStartDate)
+    const chartEnd = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
+
+    const todaySales = db.prepare(
+      'SELECT COALESCE(SUM(total_amount), 0) AS total FROM invoices WHERE date = ?',
+    ).get(today).total
+
+    const totalReceivables = db.prepare(
+      `SELECT COALESCE(SUM(total_amount - paid_amount), 0) AS total
+       FROM invoices
+       WHERE LOWER(status) IN ('unpaid', 'partial')`,
+    ).get().total
+
+    const totalExpenses = db.prepare(
+      'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE date >= ? AND date < ?',
+    ).get(monthStart, nextMonthStart).total
+
+    const lowStockCount = db.prepare(
+      'SELECT COUNT(*) AS count FROM products WHERE stock <= 5',
+    ).get().count
+
+    const salesByDate = db.prepare(
+      `SELECT date, COALESCE(SUM(total_amount), 0) AS total
+       FROM invoices
+       WHERE date >= ? AND date < ?
+       GROUP BY date`,
+    ).all(chartStart, chartEnd)
+    const expensesByDate = db.prepare(
+      `SELECT date, COALESCE(SUM(amount), 0) AS total
+       FROM expenses
+       WHERE date >= ? AND date < ?
+       GROUP BY date`,
+    ).all(chartStart, chartEnd)
+
+    const salesByDateMap = new Map(salesByDate.map((row) => [row.date, row.total]))
+    const expensesByDateMap = new Map(expensesByDate.map((row) => [row.date, row.total]))
+    const chartDateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' })
+    const chartData = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + index)
+      const dateKey = formatLocalDate(date)
+      return {
+        date: chartDateFormatter.format(date),
+        sales: salesByDateMap.get(dateKey) ?? 0,
+        expenses: expensesByDateMap.get(dateKey) ?? 0,
+      }
+    })
+
+    return { todaySales, totalReceivables, totalExpenses, lowStockCount, chartData }
   })
 
   register('settings:get', () => {
