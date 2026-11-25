@@ -10,4 +10,7 @@ contextBridge.exposeInMainWorld('api', {
 	deleteProduct: (productId) => ipcRenderer.invoke('db:deleteProduct', productId),
 	getCustomers: () => ipcRenderer.invoke('db:getCustomers'),
 	addCustomer: (customer) => ipcRenderer.invoke('db:addCustomer', customer),
+	updateCustomer: (customer) => ipcRenderer.invoke('db:updateCustomer', customer),
+	deleteCustomer: (customerId) => ipcRenderer.invoke('db:deleteCustomer', customerId),
+	getCustomerLedger: (customerId) => ipcRenderer.invoke('db:getCustomerLedger', customerId),
 })

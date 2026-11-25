@@ -11,6 +11,7 @@ const settingColumns = new Set([
   'tax_rate',
 ])
 const productColumns = new Set(['name', 'barcode', 'price', 'stock', 'tax_rate'])
+const customerColumns = new Set(['name', 'phone', 'address', 'opening_balance'])
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -147,6 +148,64 @@ function registerDatabaseHandlers(db) {
     })
 
     return db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid)
+  })
+
+  register('db:updateCustomer', (customer) => {
+    if (!isRecord(customer) || !Number.isInteger(Number(customer.id)) || Number(customer.id) < 1) {
+      throw new TypeError('A valid customer ID is required.')
+    }
+
+    const entries = Object.entries(customer).filter(([column]) => customerColumns.has(column))
+    if (entries.length === 0) {
+      throw new TypeError('Provide at least one supported customer field to update.')
+    }
+    if (entries.some(([column, value]) => column === 'name' && (typeof value !== 'string' || !value.trim()))) {
+      throw new TypeError('Customer name cannot be empty.')
+    }
+    if (entries.some(([column, value]) =>
+      column === 'opening_balance' && (typeof value !== 'number' || !Number.isFinite(value))
+    )) {
+      throw new TypeError('Opening balance must be a finite number.')
+    }
+
+    const customerId = Number(customer.id)
+    const assignments = entries.map(([column]) => `${column} = ?`).join(', ')
+    const result = db.prepare(`UPDATE customers SET ${assignments} WHERE id = ?`).run(
+      ...entries.map(([column, value]) => column === 'name' ? value.trim() : value),
+      customerId,
+    )
+
+    if (result.changes === 0) throw new Error(`Customer ${customerId} was not found.`)
+    return db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId)
+  })
+
+  register('db:deleteCustomer', (customerId) => {
+    if (!Number.isInteger(Number(customerId)) || Number(customerId) < 1) {
+      throw new TypeError('A valid customer ID is required.')
+    }
+
+    const result = db.prepare('DELETE FROM customers WHERE id = ?').run(Number(customerId))
+    if (result.changes === 0) throw new Error(`Customer ${customerId} was not found.`)
+    return { deleted: true, id: Number(customerId) }
+  })
+
+  register('db:getCustomerLedger', (customerId) => {
+    if (!Number.isInteger(Number(customerId)) || Number(customerId) < 1) {
+      throw new TypeError('A valid customer ID is required.')
+    }
+
+    const id = Number(customerId)
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(id)
+    if (!customer) throw new Error(`Customer ${id} was not found.`)
+
+    const invoices = db.prepare(
+      'SELECT * FROM invoices WHERE customer_id = ? ORDER BY date DESC, id DESC',
+    ).all(id)
+    const payments = db.prepare(
+      'SELECT * FROM payments WHERE customer_id = ? ORDER BY payment_date DESC, id DESC',
+    ).all(id)
+
+    return { customer, invoices, payments }
   })
 }
 
