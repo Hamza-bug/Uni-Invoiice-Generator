@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import {
   Boxes,
+  ChartNoAxesCombined,
   FileText,
+  History,
   LayoutDashboard,
   Moon,
   Package,
@@ -16,6 +18,8 @@ const navigation = [
   { label: 'Products', to: '/products', icon: Package },
   { label: 'Customers', to: '/customers', icon: Users },
   { label: 'Invoices', to: '/invoices', icon: FileText },
+  { label: 'Invoice History', to: '/invoice-history', icon: History },
+  { label: 'Expenses', to: '/expenses', icon: ChartNoAxesCombined },
   { label: 'Settings', to: '/settings', icon: Settings },
 ]
 
