@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('api', {
 	login: (pin) => ipcRenderer.invoke('auth:login', pin),
 	getStats: () => ipcRenderer.invoke('dashboard:getStats'),
 	getDashboardStats: () => ipcRenderer.invoke('dashboard:getStats'),
+	backupDb: () => ipcRenderer.invoke('db:backup'),
+	exportInvoicePDF: (request) => ipcRenderer.invoke('invoice:exportPDF', request),
 	getSettings: () => ipcRenderer.invoke('settings:get'),
 	updateSettings: (settings) => ipcRenderer.invoke('settings:update', settings),
 	getProducts: () => ipcRenderer.invoke('db:getProducts'),

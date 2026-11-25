@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, Check, ImagePlus, LoaderCircle, Save, Upload, X } from 'lucide-react'
+import { Building2, Check, Database, Download, ImagePlus, LoaderCircle, Save, Upload, X } from 'lucide-react'
 
 const emptySettings = {
   company_name: '',
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(emptySettings)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isBackingUp, setIsBackingUp] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -127,6 +128,30 @@ export default function SettingsPage() {
       setError(saveError instanceof Error ? saveError.message : 'Could not save company settings.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  async function handleBackup() {
+    setError('')
+    setSuccess('')
+    setIsBackingUp(true)
+
+    try {
+      if (!window.api?.backupDb) {
+        throw new Error('Database backup is available when running the desktop app.')
+      }
+
+      const result = await window.api.backupDb()
+      if (!result?.success) {
+        throw new Error(result?.error || 'Could not back up the database.')
+      }
+      if (result.data?.cancelled) return
+
+      setSuccess(`Database backup saved to: ${result.data.filePath}`)
+    } catch (backupError) {
+      setError(backupError instanceof Error ? backupError.message : 'Could not back up the database.')
+    } finally {
+      setIsBackingUp(false)
     }
   }
 
@@ -271,6 +296,29 @@ export default function SettingsPage() {
               )}
               <p className="basis-full text-xs text-[#859188] dark:text-[#819087]">Image files are stored locally with your company settings.</p>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-[#dfe6df] bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#151e19] sm:p-7">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-lg bg-[#edf3ed] text-emerald-800 dark:bg-[#223129] dark:text-lime-300">
+                <Database size={19} aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-[#26352c] dark:text-[#e7eee9]">Data Management</h2>
+                <p className="mt-0.5 text-xs text-[#78867d] dark:text-[#91a097]">Create a copy of your local business database.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleBackup}
+              disabled={isBackingUp}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#d8e0d9] bg-white px-4 text-sm font-semibold text-[#334238] transition hover:bg-[#f5f8f4] focus:outline-none focus:ring-4 focus:ring-emerald-700/10 disabled:cursor-wait disabled:opacity-60 dark:border-white/15 dark:bg-[#101613] dark:text-[#d4dfd6] dark:hover:bg-white/[0.05]"
+            >
+              {isBackingUp ? <LoaderCircle size={16} className="animate-spin" aria-hidden="true" /> : <Download size={16} aria-hidden="true" />}
+              {isBackingUp ? 'Preparing backup…' : 'Backup Database'}
+            </button>
           </div>
         </section>
 

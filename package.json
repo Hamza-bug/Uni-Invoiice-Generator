@@ -7,8 +7,20 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1 --strictPort\" \"wait-on http://127.0.0.1:5173 && electron electron/main.js\"",
     "build": "vite build",
+    "dist": "npm run build && electron-builder",
     "lint": "oxlint",
     "preview": "vite preview"
+  },
+  "build": {
+    "appId": "com.uni-invoice-generator.app",
+    "productName": "Uni Invoice Manager",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/app-icon.ico"
+    }
   },
   "dependencies": {
     "better-sqlite3": "^13.2.0",
@@ -25,6 +37,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
     "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
     "oxlint": "^1.90.0",
     "postcss": "^8.5.1",
     "tailwindcss": "^3.4.17",

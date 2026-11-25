@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -38,6 +39,94 @@ function registerDatabaseHandlers(db) {
       }
     })
   }
+
+  register('db:backup', async () => {
+    const sourcePath = path.join(app.getPath('userData'), 'invoicedb.sqlite')
+    if (!fs.existsSync(sourcePath)) throw new Error('The database file could not be found.')
+
+    const saveResult = await dialog.showSaveDialog({
+      title: 'Back up Invoice Manager database',
+      defaultPath: path.join(app.getPath('downloads'), 'invoicedb.sqlite'),
+      buttonLabel: 'Save Backup',
+      filters: [{ name: 'SQLite Database', extensions: ['sqlite', 'db'] }],
+    })
+
+    if (saveResult.canceled || !saveResult.filePath) return { cancelled: true }
+
+    const journalMode = db.pragma('journal_mode', { simple: true })
+    if (String(journalMode).toLowerCase() === 'wal') {
+      db.pragma('wal_checkpoint(FULL)')
+    }
+
+    fs.copyFileSync(sourcePath, saveResult.filePath)
+    return { cancelled: false, filePath: saveResult.filePath }
+  })
+
+  register('invoice:exportPDF', async (request) => {
+    const exportRequest = typeof request === 'string' ? { html: request } : request
+    if (!isRecord(exportRequest)) {
+      throw new TypeError('Provide invoice HTML or a URL to export.')
+    }
+
+    const hasHtml = typeof exportRequest.html === 'string' && exportRequest.html.trim().length > 0
+    const hasUrl = typeof exportRequest.url === 'string' && exportRequest.url.trim().length > 0
+    if (hasHtml === hasUrl) {
+      throw new TypeError('Provide either invoice HTML or a URL, but not both.')
+    }
+
+    let targetUrl
+    if (hasHtml) {
+      targetUrl = `data:text/html;charset=utf-8,${encodeURIComponent(exportRequest.html)}`
+    } else {
+      let parsedUrl
+      try {
+        parsedUrl = new URL(exportRequest.url)
+      } catch {
+        throw new TypeError('The invoice URL is invalid.')
+      }
+      if (!['file:', 'http:', 'https:'].includes(parsedUrl.protocol)) {
+        throw new TypeError('Invoice URLs must use file, http, or https.')
+      }
+      targetUrl = parsedUrl.toString()
+    }
+
+    const downloadDirectory = app.getPath('downloads')
+    fs.mkdirSync(downloadDirectory, { recursive: true })
+    const requestedName = typeof exportRequest.filename === 'string'
+      ? path.basename(exportRequest.filename)
+      : `invoice-${Date.now()}`
+    const safeName = requestedName
+      .replace(/\.pdf$/i, '')
+      .split('')
+      .map((character) => /[<>:"/\\|?*]/.test(character) || character.charCodeAt(0) < 32 ? '_' : character)
+      .join('')
+      .trim() || `invoice-${Date.now()}`
+    const filePath = path.join(downloadDirectory, `${safeName}.pdf`)
+
+    const printWindow = new BrowserWindow({
+      show: false,
+      width: 794,
+      height: 1123,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    })
+
+    try {
+      await printWindow.loadURL(targetUrl)
+      const pdfBuffer = await printWindow.webContents.printToPDF({
+        printBackground: true,
+        pageSize: 'A4',
+        margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+      })
+      fs.writeFileSync(filePath, pdfBuffer)
+      return filePath
+    } finally {
+      if (!printWindow.isDestroyed()) printWindow.destroy()
+    }
+  })
 
   register('auth:login', (enteredPin) => {
     const settings = db.prepare('SELECT pin_code FROM settings LIMIT 1').get()
